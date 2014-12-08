@@ -140,6 +140,9 @@ import java.util.concurrent.locks.ReentrantLock;
 public class Camera {
     private static final String TAG = "Camera";
 
+    // Flash fix logging tag
+    private static final String FLASH_TAG = "CameraFlash";
+    
     // These match the enums in frameworks/base/include/camera/Camera.h
     private static final int CAMERA_MSG_ERROR            = 0x001;
     private static final int CAMERA_MSG_SHUTTER          = 0x002;
@@ -420,6 +423,15 @@ public class Camera {
         native_release();
         mFaceDetectionRunning = false;
         notifyTorch(false);
+        
+        // Flash is no use now
+        try
+            {
+            	Log.e(FLASH_TAG, "Turning flash off");
+            	Flash.off();
+            }
+            catch (Exception e)
+            {Log.e(FLASH_TAG, e.toString());}
     }
 
     /**
@@ -955,12 +967,38 @@ public class Camera {
             case CAMERA_MSG_RAW_IMAGE:
                 if (mRawImageCallback != null) {
                     mRawImageCallback.onPictureTaken((byte[])msg.obj, mCamera);
+                    
+                    // If flash mode is auto and picture was taken, let's turn it off
+                try
+            	{
+            		if(Flash.isAuto() && Flash.isOn())
+            		{
+            			Log.e(FLASH_TAG, "Turning flash off");
+            			Flash.off();
+            		}
+            	}
+            	catch (Exception e)
+            	{Log.e(FLASH_TAG, e.toString());}
+                    
                 }
                 return;
 
             case CAMERA_MSG_COMPRESSED_IMAGE:
                 if (mJpegCallback != null) {
                     mJpegCallback.onPictureTaken((byte[])msg.obj, mCamera);
+                    
+                // If flash mode is auto and picture was taken, let's turn it off
+                try
+            	{
+            		if(Flash.isAuto() && Flash.isOn())
+            		{
+            			Log.e(FLASH_TAG, "Turning flash off");
+            			Flash.off();
+            		}
+            	}
+            	catch (Exception e)
+            	{Log.e(FLASH_TAG, e.toString());}
+                    
                 }
                 return;
 
@@ -1139,6 +1177,20 @@ public class Camera {
         synchronized (mAutoFocusCallbackLock) {
             mAutoFocusCallback = cb;
         }
+        
+        // If we are using auto focus
+        try
+            {
+            	if(Flash.isAuto())
+            	{
+            		Log.e(FLASH_TAG, "Turning flash on");
+            		Flash.on();
+            		Thread.sleep(500);
+            	}
+            }
+            catch (Exception e)
+            {Log.e(FLASH_TAG, e.toString());}
+            
         native_autoFocus();
     }
     private native final void native_autoFocus();
@@ -1289,6 +1341,20 @@ public class Camera {
      */
     public final void takePicture(ShutterCallback shutter, PictureCallback raw,
             PictureCallback postview, PictureCallback jpeg) {
+            	
+            // If we aren't using auto focus
+            try
+            {
+            	if(Flash.isAuto() && !Flash.isOn())
+            	{
+            		Log.e(FLASH_TAG, "Turning flash on, no focus");
+            		Flash.on();
+            		Thread.sleep(2500);
+            	}
+            }
+            catch (Exception e)
+            {Log.e(FLASH_TAG, e.toString());}
+            	
         mShutterCallback = shutter;
         mRawImageCallback = raw;
         mPostviewCallback = postview;
@@ -2500,6 +2566,14 @@ public class Camera {
             }
 
             put(key, value);
+            
+            // Flash fix injection (on, off, torch) auto mode will require autoFocus and takePicture
+            try
+            {
+            	if(key == KEY_FLASH_MODE) Flash.setFlashMode(value);
+            }
+            catch (Exception e)
+            {Log.e(FLASH_TAG, e.toString());}
         }
 
         /**
